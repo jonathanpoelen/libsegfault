@@ -1,0 +1,3 @@
+option('nobacktrace', type : 'boolean', value : false)
+option('backtrace-include', type : 'string', value : '')
+option('backtrace-library-path', type : 'string', value : '')
