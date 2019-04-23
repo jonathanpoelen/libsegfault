@@ -59,11 +59,11 @@ meson build
 ### Disable libbacktrace
 
 ```bash
-meson build -nobacktrace
+meson build -Dnobacktrace=false
 ```
 
 ### Configure libbacktrace
 
 ```bash
-meson build -backtrace-include='"my/backtrace.h"' -Dbacktrace-library-path=my-backtrace-dir
+meson build -Dbacktrace-include='"my/backtrace.h"' -Dbacktrace-library-path=my-backtrace-dir
 ```
