@@ -59,7 +59,7 @@ meson build
 ### Disable libbacktrace
 
 ```bash
-meson build -Dnobacktrace=false
+meson build -Dnobacktrace=true
 ```
 
 ### Configure libbacktrace
