@@ -12,6 +12,7 @@ namespace
   f(BUS) \
   f(ILL) \
   f(FPE) \
+  f(TRAP) \
   f(SYS)
 
 struct S { char const* name; std::size_t len; int num; };
@@ -57,6 +58,7 @@ segabort_init(void)
     signal(SIGILL, segabort_handler);
     signal(SIGABRT, segabort_handler);
     signal(SIGFPE, segabort_handler);
+    signal(SIGTRAP, segabort_handler);
     signal(SIGSYS, segabort_handler);
   }
   else if (*signals)
