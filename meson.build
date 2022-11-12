@@ -25,5 +25,6 @@ shared_library('segfault', 'libsegfault.cpp',
   native: true,
   cpp_args: cxx_args,
   dependencies: deps,
+  install: true,
 )
 executable('crash', 'crash.cpp', cpp_args: ['-g', '-rdynamic'])
