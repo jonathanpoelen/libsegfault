@@ -47,6 +47,7 @@ Comma-separated values:
 - bus
 - ill
 - fpe
+- trap
 - sys
 - all
 
