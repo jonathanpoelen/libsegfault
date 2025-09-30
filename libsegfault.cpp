@@ -1,6 +1,5 @@
 #include <boost/stacktrace.hpp>
 #include <csignal>
-#include <strings.h>
 #include <unistd.h>
 
 namespace
@@ -15,28 +14,100 @@ namespace
   f(TRAP) \
   f(SYS)
 
-struct S { char const* name; std::size_t len; int num; };
-#define D(s) S{#s, sizeof(#s)-1, SIG##s},
-constexpr S signal_defs[] = { X_SIGNALS(D) };
+struct Str
+{
+  char const* ptr;
+  std::size_t len;
+
+  constexpr Str(char const* s, std::size_t len)
+    : ptr(s)
+    , len(len)
+  {}
+
+  template<std::size_t N>
+  constexpr Str(char const(&s)[N])
+    : ptr(s)
+    , len(N - 1)
+  {}
+
+  bool ieq(Str other) const
+  {
+    if (other.len != len)
+    {
+      return false;
+    }
+
+    auto lower = [](char c) { return static_cast<uint8_t>(c) | 0b100000; };
+
+    #define CASE(n) case n: if (lower(ptr[n-1]) != lower(other.ptr[n-1])) return false;
+
+    switch (len)
+    {
+      CASE(4) [[fallthrough]];
+      CASE(3) [[fallthrough]];
+      CASE(2) [[fallthrough]];
+      CASE(1)
+    }
+
+    #undef CASE
+
+    return true;
+  }
+};
+
+struct Signal
+{
+  Str name;
+  int num;
+};
+
+#define D(s) Signal {#s, SIG##s},
+constexpr Signal signal_defs[] = { X_SIGNALS(D) };
 #undef D
 
-int signal_num(char const* sig, std::size_t n)
-{
-  for (auto const& s : signal_defs)
+constexpr auto signal_name_len_max = []{
+  std::size_t n = 0;
+  for (auto s : signal_defs)
   {
-    if (s.len == n && strncasecmp(s.name, sig, n) == 0)
-    {
-      return s.num;
-    }
+    n = (n < s.name.len) ? s.name.len : n;
   }
-  return -1;
+  return n;
+}();
+static_assert(signal_name_len_max <= 4, "ieq() update required");
+
+
+int signal_num_of(Str name)
+{
+  auto find = [](Str name){
+    for (auto const& sig : signal_defs)
+    {
+      if (sig.name.ieq(name))
+      {
+        return sig.num;
+      }
+    }
+    return -1;
+  };
+
+  int ret = find(name);
+  // not fount, skip SIG prefix
+  if (ret == -1 && name.len > 3 && Str(name.ptr, 3).ieq("sig"))
+  {
+    ret = find({name.ptr + 3, name.len - 3});
+  }
+  return ret;
 }
 
-void segabort_handler(int signum)
+void print_err(Str s)
+{
+  write(STDERR_FILENO, s.ptr, s.len);
+}
+
+void sigabort_handler(int signum)
 {
   ::signal(signum, SIG_DFL);
   auto s = to_string(boost::stacktrace::stacktrace());
-  write(STDERR_FILENO, s.data(), s.size());
+  print_err({s.data(), s.size()});
   ::raise(signum);
 }
 
@@ -46,58 +117,64 @@ segabort_init(void)
 {
   const char *signals = getenv("SEGFAULT_SIGNALS");
   int error = 0;
+
+  // no signal specified, use default
   if (!signals)
   {
-    signal(SIGSEGV, segabort_handler);
-    signal(SIGABRT, segabort_handler);
+    signal(SIGSEGV, sigabort_handler);
+    signal(SIGABRT, sigabort_handler);
   }
-  else if (strcasecmp(signals, "all") == 0)
+  // enable user-configured signals
+  else
   {
-    signal(SIGSEGV, segabort_handler);
-    signal(SIGBUS, segabort_handler);
-    signal(SIGILL, segabort_handler);
-    signal(SIGABRT, segabort_handler);
-    signal(SIGFPE, segabort_handler);
-    signal(SIGTRAP, segabort_handler);
-    signal(SIGSYS, segabort_handler);
-  }
-  else if (*signals)
-  {
-    char const* sig = signals;
-    while (*sig)
+    auto is_sep = [](char c) { return c == ',' || c == ' '; };
+    int signum;
+
+    while (*signals)
     {
-      while (*sig == ',')
+      // skip separator
+      while (is_sep(*signals))
       {
-        ++sig;
+        ++signals;
       }
 
-      char const* end = sig + 1;
-      while (*end && *end != ',')
+      // no more value, stop the parser
+      if (!*signals)
+      {
+        break;
+      }
+
+      // find separator or end of line
+      char const* end = signals + 1;
+      while (*end && !is_sep(*end))
       {
         ++end;
       }
 
-      int signum = signal_num(sig, end-sig);
-      if (signum != -1)
+      Str name { signals, static_cast<std::size_t>(end-signals) };
+      signals = end;
+
+      // enable all signals
+      if (Str("all").ieq(name))
       {
-        ::signal(signum, segabort_handler);
+        #define D(s) signal(SIG##s, sigabort_handler);
+        X_SIGNALS(D)
+        #undef D
       }
+      // signal found
+      else if ((signum = signal_num_of(name)) != -1)
+      {
+        ::signal(signum, sigabort_handler);
+      }
+      // signal not found
       else
       {
-        auto wa = [](auto& a) { ::write(STDERR_FILENO, a, sizeof(a)-1); };
-        auto ws = [](auto* s, std::size_t n) { ::write(STDERR_FILENO, s, n); };
-        wa("Unknown signal '");
-        ws(sig, end-sig);
+        print_err("Unknown signal '");
+        print_err(name);
         #define D(s) #s ", "
-        wa("' in " X_SIGNALS(D) "all\n");
+        print_err("' in " X_SIGNALS(D) "all\n");
         #undef D
         error = 1;
-      }
-
-      sig = end;
-      if (*sig)
-      {
-        ++sig;
       }
     }
   }

@@ -1,16 +1,18 @@
 # LibSegFault
 
-Implementation of `/lib/libSegFault.so` with `Boost.stracktrace`
+Get a call trace when your application crashes.
 
-$ `./crash`
+Use `Boost.stracktrace` as a dependency.
 
-```
+```console
+$ g++ crash.cpp -o crash
+$ ./crash
 crash: /crash.cpp:5: void foo(int*): Assertion `p' failed.
 zsh: abort (core dumped)  ./crash
 ```
-$ `LD_PRELOAD=./libsegfault.so ./crash`
 
-```
+```console
+$ LD_PRELOAD=./libsegfault.so ./crash
 crash: /crash.cpp:5: void foo(int*): Assertion `p' failed.
  0# (anonymous namespace)::segabort_handler(int) at /libsegfault.cpp:39
  1# 0x00007FCCEA604E00 in /usr/lib/libc.so.6
@@ -25,12 +27,16 @@ crash: /crash.cpp:5: void foo(int*): Assertion `p' failed.
 zsh: abort (core dumped)  LD_PRELOAD=./libsegfault.so ./crash
 ```
 
-$ `SEGFAULT_SIGNALS=segv LD_PRELOAD=./libsegfault.so ./crash`
+Specify a list of signals with `SEGFAULT_SIGNALS` (default is `segv,abrt`).
 
-```
+```console
+$ SEGFAULT_SIGNALS=segv LD_PRELOAD=./libsegfault.so ./crash
 crash: ../../projects/sigabort/crash.cpp:5: void foo(int*): Assertion `p' failed.
 zsh: abort (core dumped)  SEGFAULT_SIGNALS=segv LD_PRELOAD=./libsegfault.so ./crash
 ```
+
+No backtrace since the signal is abrt, not segv.
+
 
 ## stacktrace.sh
 
@@ -40,7 +46,7 @@ Wrapper for use `libsegfault` with `libasan`.
 
 ## `SEGFAULT_SIGNALS`
 
-Comma-separated values:
+Value case-insensitive separated by space or comma:
 
 - segv
 - abrt
@@ -51,20 +57,26 @@ Comma-separated values:
 - sys
 - all
 
-## Build
+## Installation
 
 ```bash
-meson build
+meson setup --buildtype=release build_dir
+cd build_dir
+meson compile
+meson install
 ```
 
 ### Disable libbacktrace
 
 ```bash
-meson build -Dnobacktrace=true
+meson setup --reconfigure -Dnobacktrace=false project-path
 ```
 
 ### Configure libbacktrace
 
 ```bash
-meson build -Dbacktrace-include='"my/backtrace.h"' -Dbacktrace-library-path=my-backtrace-dir
+meson setup --reconfigure \
+  -Dbacktrace-include='"my/backtrace.h"' \
+  -Dbacktrace-library-path=my-backtrace-dir \
+  project-path
 ```
